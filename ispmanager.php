@@ -122,6 +122,33 @@ class Server_Manager_ISPmanager extends Server_Manager
 
         return $username;
     }
+
+    /**
+     * Build ISPmanager limit_* parameters from a Server_Package.
+     * Omits a key entirely when the plan value is null/empty, since ISPmanager
+     * treats an absent limit_* parameter as unlimited. Previously these used
+     * ?? fallback defaults, which silently capped "unlimited" plans (e.g.
+     * Reseller Hosting) at small hardcoded numbers instead of leaving them open.
+     */
+    private function buildLimitParams(Server_Package $package): array
+    {
+        $map = [
+            'limit_webdomains' => $package->getMaxDomains(),
+            'limit_ftp_users'  => $package->getMaxFtp(),
+            'limit_db'         => $package->getMaxSql(),
+            'limit_emails'     => $package->getMaxPop(),
+            'limit_quota'      => $package->getQuota(),
+        ];
+
+        $params = [];
+        foreach ($map as $key => $value) {
+            if ($value !== null && $value !== '') {
+                $params[$key] = $value;
+            }
+        }
+
+        return $params;
+    }
     /**
      * Test the connection to ISPmanager
      */
@@ -185,18 +212,18 @@ class Server_Manager_ISPmanager extends Server_Manager
         $this->getLog()->info('ISPmanager createAccount username: ' . $username);
 
         // Step 1: Create the user account
-        $this->apiCall('user.edit', [
-            'sok'              => 'ok',
-            'name'             => $username,
-            'passwd'           => $password,
-            'confirm'          => $password,
-            'limit_webdomains' => $package->getMaxDomains() ?? '10',
-            'limit_ftp_users'  => $package->getMaxFtp() ?? '5',
-            'limit_db'         => $package->getMaxSql() ?? '5',
-            'limit_emails'     => $package->getMaxPop() ?? '20',
-            'limit_ssl'        => 'on',
-            'limit_quota'      => $package->getQuota() ?? '',
-        ]);
+        $params = array_merge(
+            [
+                'sok'       => 'ok',
+                'name'      => $username,
+                'passwd'    => $password,
+                'confirm'   => $password,
+                'limit_ssl' => 'on',
+            ],
+            $this->buildLimitParams($package)
+        );
+
+        $this->apiCall('user.edit', $params);
 
         $this->getLog()->info('ISPmanager createAccount user created: ' . $username);
 
@@ -364,15 +391,15 @@ class Server_Manager_ISPmanager extends Server_Manager
         $this->getLog()->info('ISPmanager changeAccountPackage: ' . $account->getUsername()
             . ' -> ' . $package->getName());
 
-        $this->apiCall('user.edit', [
-            'sok'              => 'ok',
-            'elid'             => $account->getUsername(),
-            'limit_webdomains' => $package->getMaxDomains() ?? '',
-            'limit_ftp_users'  => $package->getMaxFtp() ?? '',
-            'limit_db'         => $package->getMaxSql() ?? '',
-            'limit_emails'     => $package->getMaxPop() ?? '',
-            'limit_quota'      => $package->getQuota() ?? '',
-        ]);
+        $params = array_merge(
+            [
+                'sok'  => 'ok',
+                'elid' => $account->getUsername(),
+            ],
+            $this->buildLimitParams($package)
+        );
+
+        $this->apiCall('user.edit', $params);
 
         return true;
     }
