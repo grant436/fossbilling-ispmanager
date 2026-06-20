@@ -125,29 +125,36 @@ class Server_Manager_ISPmanager extends Server_Manager
 
     /**
      * Build ISPmanager limit_* parameters from a Server_Package.
-     * Omits a key entirely when the plan value is null/empty, since ISPmanager
-     * treats an absent limit_* parameter as unlimited. Previously these used
-     * ?? fallback defaults, which silently capped "unlimited" plans (e.g.
-     * Reseller Hosting) at small hardcoded numbers instead of leaving them open.
+     *
+     * Every FOSSBilling hosting plan is expected to define explicit numeric
+     * limits — including the top "Reseller" tier, which uses large bounded
+     * numbers (e.g. 50 domains) rather than genuine "unlimited", since this
+     * runs on a single VPS with finite real capacity. ISPmanager has no true
+     * unlimited sentinel in its API in any case — its own developer docs
+     * confirm the UI's "unlimited" option is implemented by silently
+     * substituting a large number, not a real unbounded state.
+     *
+     * Two alternative approaches were tested and ruled out before settling
+     * on this plain pass-through:
+     *   - Omitting the limit_* parameter entirely: confirmed via direct API
+     *     testing to leave the account's existing value completely
+     *     untouched, rather than meaning "unlimited".
+     *   - Sending limit_*_enabled=off: confirmed via direct API testing to
+     *     return <ok/> but have no actual effect on the stored limit.
+     *
+     * If a plan value is somehow still null/empty (shouldn't happen given
+     * the above), we fall back to a safe small default rather than risk
+     * sending an unintended large or zero value to ISPmanager.
      */
     private function buildLimitParams(Server_Package $package): array
     {
-        $map = [
-            'limit_webdomains' => $package->getMaxDomains(),
-            'limit_ftp_users'  => $package->getMaxFtp(),
-            'limit_db'         => $package->getMaxSql(),
-            'limit_emails'     => $package->getMaxPop(),
-            'limit_quota'      => $package->getQuota(),
+        return [
+            'limit_webdomains' => $package->getMaxDomains() ?? '1',
+            'limit_ftp_users'  => $package->getMaxFtp() ?? '1',
+            'limit_db'         => $package->getMaxSql() ?? '1',
+            'limit_emails'     => $package->getMaxPop() ?? '5',
+            'limit_quota'      => $package->getQuota() ?? '1024',
         ];
-
-        $params = [];
-        foreach ($map as $key => $value) {
-            if ($value !== null && $value !== '') {
-                $params[$key] = $value;
-            }
-        }
-
-        return $params;
     }
     /**
      * Test the connection to ISPmanager
