@@ -12,7 +12,10 @@ declare(strict_types=1);
 
 class Server_Manager_ISPmanager extends Server_Manager
 {
-    // ISPmanager API base URL — constructed from host and port
+    // ISPmanager API base URL — constructed from host and port.
+    // Note: this is for the API only (talks directly to port 1500, which is
+    // firewalled to localhost/Docker network). Customer-facing login URLs
+    // use a separate hostname/path — see getLoginUrl().
     private string $apiBase;
 
     /**
@@ -173,18 +176,23 @@ class Server_Manager_ISPmanager extends Server_Manager
 
     /**
      * Returns the URL for the client to log into their hosting control panel
+     *
+     * Uses the configured Hostname (isp.servmeinternet.co.nz, served over
+     * standard HTTPS via an Nginx reverse proxy to ISPmanager's internal
+     * port 1500) rather than building a raw IP:1500 URL directly. Port 1500
+     * itself is firewalled to localhost/Docker network only — it is not
+     * publicly reachable — so a raw IP:1500 link in a customer email would
+     * be both unprofessional-looking and not actually accessible.
      */
     public function getLoginUrl(?Server_Account $account = null): string
     {
+        $host = $this->_config['host'] ?? $this->_config['ip'];
+
         if ($account === null) {
-            return $this->apiBase;
+            return "https://{$host}/ispmgr";
         }
 
-        // Build a direct login URL for the customer
-        $host = $this->_config['host'] ?? $this->_config['ip'];
-        $port = $this->_config['port'] ?? '1500';
-
-        return "https://{$host}:{$port}/ispmgr?username={$account->getUsername()}";
+        return "https://{$host}/ispmgr?username={$account->getUsername()}";
     }
 
     /**
@@ -193,9 +201,8 @@ class Server_Manager_ISPmanager extends Server_Manager
     public function getResellerLoginUrl(?Server_Account $account = null): string
     {
         $host = $this->_config['host'] ?? $this->_config['ip'];
-        $port = $this->_config['port'] ?? '1500';
 
-        return "https://{$host}:{$port}/ispmgr";
+        return "https://{$host}/ispmgr";
     }
     /**
      * Create a new hosting account in ISPmanager
